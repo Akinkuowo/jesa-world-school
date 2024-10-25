@@ -4,6 +4,7 @@
 
 body {
   font-family: Arial, Helvetica, sans-serif;
+  
 }
 
 @layer base {
@@ -60,6 +61,9 @@ body {
     --chart-4: 280 65% 60%;
     --chart-5: 340 75% 55%;
   }
+}
+.bg{
+  background-image: url("/img/bg.jpg");
 }
 
 @layer base {

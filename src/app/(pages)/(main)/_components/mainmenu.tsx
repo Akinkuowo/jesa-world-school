@@ -56,20 +56,20 @@ const MainMenu = () => {
                 </Link>
                 <div className="hidden lg:flex items-center gap-8">
                     <nav>
-                        <ul className="flex space-x-6">
-                            <li className="mx-10">
+                        <ul className="flex ">
+                            <li className="mx-5">
                                 <Link href="/" className="font-[700]">Home</Link>
                             </li>
-                            <li className="mx-10">
+                            <li className="mx-5 text-center">
                                 <Link href="/about" className="font-[700]">About us</Link>
                             </li>
-                            <li className="mx-10">
+                            <li className="mx-5">
                                 <Link href="/our-teachers" className="font-[700]">Our Teachers</Link>
                             </li>
-                            <li className="mx-10">
+                            <li className="mx-5">
                                 <Link href="/news" className="font-[700]">News</Link>
                             </li>
-                            <li className="mx-10">
+                            <li className="mx-5">
                                 <Link href="/contact" className="font-[700]">Contact us</Link>
                             </li>
                         </ul>
