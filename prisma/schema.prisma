@@ -1,0 +1,221 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  SUPERADMIN
+  ADMIN
+  TEACHER
+  STUDENT
+}
+
+model School {
+  id             String   @id @default(cuid())
+  schoolNumber   String   @unique @map("school_number")
+  name           String
+  address        String?
+  phone          String?
+  email          String?  @unique
+  isActive       Boolean  @default(true)
+  
+  // Quotas
+  maxStudents    Int      @default(100) @map("max_students")
+  maxTeachers    Int      @default(10)  @map("max_teachers")
+
+  // Validity
+  validUntil         DateTime  @default(dbgenerated("NOW() + interval '4 months'")) @map("valid_until")
+  lastReactivatedAt  DateTime? @map("last_reactivated_at")
+  
+  users          User[]
+  examSchedules  ExamSchedule[]
+  gradingSystems GradingSystem[]
+  lessonNotes    LessonNote[]
+  assignments    Assignment[]
+  examQuestions  ExamQuestion[]
+  
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  @@map("schools")
+}
+
+model User {
+  id                String   @id @default(cuid())
+  email             String   @unique
+  username          String?  @unique
+  studentId         String?  @unique @map("student_id")
+  password          String
+  firstName         String   @map("first_name")
+  lastName          String   @map("last_name")
+  role              Role     @default(STUDENT)
+  isActive          Boolean  @default(true)
+  isEmailVerified   Boolean  @default(false) @map("is_email_verified")
+  verificationCode  String?  @map("verification_code")
+  twoFactorCode     String?  @map("two_factor_code")
+  twoFactorExpires  DateTime? @map("two_factor_expires")
+  
+  // Relation to School
+  schoolId          String?  @map("school_id")
+  school            School?  @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  // Profile info
+  phone             String?
+  address           String?
+  studentClass      String?  @map("student_class")
+  subjects          String[]
+
+  results           StudentResult[] @relation("StudentResults")
+  lessonNotes       LessonNote[]    @relation("TeacherNotes")
+  assignments       Assignment[]    @relation("TeacherAssignments")
+  examQuestions     ExamQuestion[]  @relation("TeacherExams")
+  
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+  lastLogin         DateTime? @map("last_login")
+
+  @@map("users")
+
+}
+
+model Subject {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  section   String   // "JUNIOR" or "SENIOR"
+  category  String?  // "Science", "Arts", "Commercial", "Compulsory", "Trade" (for Senior)
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("subjects")
+}
+
+model ExamSchedule {
+  id        String   @id @default(cuid())
+  subject   String
+  class     String
+  date      String
+  time      String
+  duration  String
+  type      String   // e.g. "First Term", "MOCK", "WAEC"
+  
+  schoolId  String   @map("school_id")
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("exam_schedules")
+}
+
+model GradingSystem {
+  id        String   @id @default(cuid())
+  grade     String   // e.g. "A", "B", "C"
+  minScore  Int      @map("min_score")
+  maxScore  Int      @map("max_score")
+  remark    String?  // e.g. "Excellent", "Very Good"
+  
+  schoolId  String   @map("school_id")
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("grading_systems")
+}
+
+model StudentResult {
+  id        String   @id @default(cuid())
+  studentId String   @map("student_id")
+  student   User     @relation("StudentResults", fields: [studentId], references: [id], onDelete: Cascade)
+  
+  subject   String
+  marks     Float
+  testScore Float    @default(0)
+  term      String   // e.g. "First Term"
+  class     String   // The class student was in
+  
+  schoolId  String   @map("school_id")
+  
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  answers   StudentAnswer[]
+
+  @@map("student_results")
+}
+
+model LessonNote {
+  id        String   @id @default(cuid())
+  teacherId String   @map("teacher_id")
+  teacher   User     @relation("TeacherNotes", fields: [teacherId], references: [id], onDelete: Cascade)
+  subject   String
+  topic     String
+  content   String   @db.Text
+  class     String
+  schoolId  String   @map("school_id")
+  school    School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("lesson_notes")
+}
+
+model Assignment {
+  id          String   @id @default(cuid())
+  teacherId   String   @map("teacher_id")
+  teacher     User     @relation("TeacherAssignments", fields: [teacherId], references: [id], onDelete: Cascade)
+  title       String
+  description String   @db.Text
+  dueDate     DateTime @map("due_date")
+  class       String
+  subject     String
+  schoolId    String   @map("school_id")
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("assignments")
+}
+
+model ExamQuestion {
+  id          String   @id @default(cuid())
+  teacherId   String   @map("teacher_id")
+  teacher     User     @relation("TeacherExams", fields: [teacherId], references: [id], onDelete: Cascade)
+  subject     String
+  class       String
+  type        String   // "MCQ" or "THEORY"
+  question    String   @db.Text
+  options     Json?    // For MCQ
+  answer      String   @db.Text
+  marks       Float    @default(1.0)
+  term        String   // e.g. "First Term"
+  schoolId    String   @map("school_id")
+  school      School   @relation(fields: [schoolId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  studentAnswers StudentAnswer[]
+
+  @@map("exam_questions")
+}
+
+model StudentAnswer {
+  id         String   @id @default(cuid())
+  resultId   String   @map("result_id")
+  result     StudentResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  questionId String   @map("question_id")
+  question   ExamQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  answerText String   @map("answer_text") @db.Text
+  isCorrect  Boolean? @default(false)
+  marks      Float?   @default(0) // For manual theory grading
+
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  @@map("student_answers")
+}

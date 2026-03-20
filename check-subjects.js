@@ -1,0 +1,1 @@
+const { PrismaClient } = require('@prisma/client'); const prisma = new PrismaClient(); async function main() { const count = await prisma.subject.count(); console.log('Subject count:', count); if (count > 0) { const s = await prisma.subject.findFirst(); console.log('Sample:', s); } } main();
