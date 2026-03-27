@@ -82,11 +82,7 @@ const generateSchoolNumber = async () => {
 
 async function start() {
   await app.register(cors, {
-    origin: [
-      "http://localhost:3000",
-      "https://jesaworldtech.com.ng",
-      "https://www.jesaworldtech.com.ng"
-    ],
+    origin: ["http://localhost:3000"],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -182,8 +178,11 @@ async function start() {
       const user = await prisma.user.findFirst({
         where: { email, role: "SUPERADMIN" }
       });
-      if (!user || !(await bcrypt.compare(password, user.password))) {
-        return reply.code(401).send({ error: "Invalid credentials" });
+      if (!user) {
+        return reply.code(404).send({ error: "Incorrect email" });
+      }
+      if (!(await bcrypt.compare(password, user.password))) {
+        return reply.code(401).send({ error: "Incorrect password" });
       }
 
       if (!user.isEmailVerified) {
@@ -223,9 +222,14 @@ async function start() {
         },
         include: { school: true }
       });
-
-      if (!user || !user.isActive || !(await bcrypt.compare(password, user.password))) {
-        return reply.code(401).send({ error: "Invalid credentials or account inactive" });
+      if (!user) {
+        return reply.code(404).send({ error: studentId ? "Student ID can't be found" : "Email can't be found" });
+      }
+      if (!user.isActive) {
+        return reply.code(403).send({ error: "Account inactive. Please contact admin." });
+      }
+      if (!(await bcrypt.compare(password, user.password))) {
+        return reply.code(401).send({ error: "Incorrect password" });
       }
 
       // Check School Validity
@@ -272,8 +276,14 @@ async function start() {
         include: { school: true }
       });
 
-      if (!user || !user.isActive || !(await bcrypt.compare(password, user.password))) {
-        return reply.code(401).send({ error: "Invalid credentials or account inactive" });
+      if (!user) {
+        return reply.code(404).send({ error: "Email can't be found" });
+      }
+      if (!user.isActive) {
+        return reply.code(403).send({ error: "Account inactive. Please contact admin." });
+      }
+      if (!(await bcrypt.compare(password, user.password))) {
+        return reply.code(401).send({ error: "Incorrect password" });
       }
 
       // Check School Validity
@@ -312,17 +322,30 @@ async function start() {
       if (!schoolNumber) return reply.code(400).send({ error: "School number is required" });
       if (!email) return reply.code(400).send({ error: "Email is required" });
 
+      // Check school first
+      const school = await prisma.school.findUnique({
+        where: { schoolNumber }
+      });
+      if (!school) {
+        return reply.code(404).send({ error: "School ID can't be found" });
+      }
+
       const user = await prisma.user.findFirst({
         where: {
           email,
           role: "ADMIN",
-          school: { schoolNumber }
+          schoolId: school.id
         },
         include: { school: true }
       });
-
-      if (!user || !user.isActive || !(await bcrypt.compare(password, user.password))) {
-        return reply.code(401).send({ error: "Invalid credentials or account inactive" });
+      if (!user) {
+        return reply.code(404).send({ error: "Email can't be found" });
+      }
+      if (!user.isActive) {
+        return reply.code(403).send({ error: "Account inactive. Please contact admin." });
+      }
+      if (!(await bcrypt.compare(password, user.password))) {
+        return reply.code(401).send({ error: "Incorrect password" });
       }
 
       // Check School Validity
@@ -460,7 +483,7 @@ async function start() {
     }
 
     const { id } = request.params;
-    const { firstName, lastName, phone, address, studentClass, subjects } = request.body;
+    const { firstName, lastName, phone, address, studentClass, subjects, password } = request.body;
     const schoolId = request.user.role === "SUPERADMIN" ? request.body.schoolId : request.user.schoolId;
 
     try {
@@ -472,16 +495,22 @@ async function start() {
         return reply.code(403).send({ error: "Forbidden: User belongs to another school" });
       }
 
+      const updateData = {
+        firstName,
+        lastName,
+        phone,
+        address,
+        studentClass,
+        subjects
+      };
+
+      if (password && password.trim() !== "") {
+        updateData.password = await bcrypt.hash(password, 10);
+      }
+
       const updatedUser = await prisma.user.update({
         where: { id },
-        data: {
-          firstName,
-          lastName,
-          phone,
-          address,
-          studentClass,
-          subjects
-        }
+        data: updateData
       });
 
       return updatedUser;
@@ -640,24 +669,32 @@ async function start() {
       }
     }
 
-    const hashedPassword = await bcrypt.hash(password, 10);
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        firstName,
-        lastName,
-        role,
-        phone,
-        address,
-        school: { connect: { id: schoolId } },
-        studentId,
-        studentClass,
-        subjects
-      }
-    });
+    try {
+      const hashedPassword = await bcrypt.hash(password, 10);
+      const user = await prisma.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          firstName,
+          lastName,
+          role,
+          phone,
+          address,
+          school: { connect: { id: schoolId } },
+          studentId,
+          studentClass,
+          subjects
+        }
+      });
 
-    return user;
+      return user;
+    } catch (err) {
+      if (err.code === 'P2002') {
+        return reply.code(400).send({ error: "Email already exists" });
+      }
+      app.log.error(err);
+      return reply.code(500).send({ error: "Failed to create user" });
+    }
   });
 
   // Bulk Add Students (CSV Upload)
@@ -1550,7 +1587,7 @@ async function start() {
 
       // 1. Fetch unique classes from students in this school
       const userClasses = await prisma.user.findMany({
-        where: {
+        where: { 
           schoolId,
           role: 'STUDENT',
           studentClass: { not: null }
@@ -1817,7 +1854,7 @@ async function start() {
           }
         } else if (ans.question.type === 'THEORY') {
           // For theory, use the marks stored (which might have been updated above)
-          const updatedAns = Array.isArray(theoryGrades)
+          const updatedAns = Array.isArray(theoryGrades) 
             ? theoryGrades.find(tg => tg.answerId === ans.id)
             : null;
           newTotalScore += updatedAns ? parseFloat(updatedAns.marks) : (ans.marks || 0);
@@ -1830,7 +1867,7 @@ async function start() {
       // 5. Update the StudentResult with the new total score and test score
       const updatedResult = await prisma.studentResult.update({
         where: { id: resultId },
-        data: {
+        data: { 
           marks: newTotalScore,
           testScore: finalTestScore
         }
@@ -2107,7 +2144,7 @@ async function start() {
       // Map specific classes to their broad scheduling categories
       const studentClassLower = student.studentClass.toLowerCase();
       const classCategories = [student.studentClass]; // Always include their exact class
-
+      
       if (['ss1', 'ss2', 'ss3'].includes(studentClassLower)) {
         classCategories.push('Senior Secondary');
       } else if (['js1', 'js2', 'js3'].includes(studentClassLower)) {
@@ -2178,7 +2215,7 @@ async function start() {
       // Generate possible class name variants to match how teachers might have typed it
       const sClass = (student.studentClass || "").toLowerCase();
       const possibleClasses = [student.studentClass];
-
+      
       if (sClass.match(/^ss\d$/)) {
         possibleClasses.push(`SSS ${sClass.replace('ss', '')}`);
         possibleClasses.push(`ss ${sClass.replace('ss', '')}`);
@@ -2186,7 +2223,7 @@ async function start() {
         possibleClasses.push(`JSS ${sClass.replace('js', '')}`);
         possibleClasses.push(`js ${sClass.replace('js', '')}`);
       }
-
+      
       const rawQuestions = await prisma.examQuestion.findMany({
         where: {
           schoolId: request.user.schoolId,
@@ -2213,7 +2250,7 @@ async function start() {
         return Math.random() - 0.5;
       });
 
-      return {
+      return { 
         exam: {
           subject: exam.subject,
           duration: exam.duration,
@@ -2237,7 +2274,7 @@ async function start() {
     try {
       const student = await prisma.user.findUnique({ where: { id: request.user.id } });
       const exam = await prisma.examSchedule.findUnique({ where: { id: request.params.id } });
-
+      
       if (!exam || !student) {
         return reply.code(404).send({ error: "Exam or student not found" });
       }
@@ -2285,7 +2322,7 @@ async function start() {
       for (const q of questions) {
         maxScore += q.marks || 1;
         const studentAnswer = answers[q.id];
-
+        
         console.log(`[DEBUG_SUBMIT] QID: ${q.id}, Type: ${q.type}, StudentAnswer: "${studentAnswer}"`);
 
         if (!studentAnswer) continue;
@@ -2294,7 +2331,7 @@ async function start() {
           const answerLetter = (q.answer || "").toUpperCase().trim();
           const optionIndex = answerLetter.charCodeAt(0) - 65;
           const correctOptionText = q.options[optionIndex];
-
+          
           console.log(`[DEBUG_SUBMIT] Correct Letter: ${answerLetter}, Index: ${optionIndex}, CorrectText: "${correctOptionText}"`);
 
           if (correctOptionText) {
