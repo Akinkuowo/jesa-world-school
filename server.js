@@ -82,7 +82,11 @@ const generateSchoolNumber = async () => {
 
 async function start() {
   await app.register(cors, {
-    origin: ["http://localhost:3000"],
+    origin: [
+      "http://localhost:3000",
+      "https://jesaworldtech.com.ng",
+      "http://jesaworldtech.com.ng"  // in case of http redirect
+    ],
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"],
     credentials: true,
@@ -1587,7 +1591,7 @@ async function start() {
 
       // 1. Fetch unique classes from students in this school
       const userClasses = await prisma.user.findMany({
-        where: { 
+        where: {
           schoolId,
           role: 'STUDENT',
           studentClass: { not: null }
@@ -1854,7 +1858,7 @@ async function start() {
           }
         } else if (ans.question.type === 'THEORY') {
           // For theory, use the marks stored (which might have been updated above)
-          const updatedAns = Array.isArray(theoryGrades) 
+          const updatedAns = Array.isArray(theoryGrades)
             ? theoryGrades.find(tg => tg.answerId === ans.id)
             : null;
           newTotalScore += updatedAns ? parseFloat(updatedAns.marks) : (ans.marks || 0);
@@ -1867,7 +1871,7 @@ async function start() {
       // 5. Update the StudentResult with the new total score and test score
       const updatedResult = await prisma.studentResult.update({
         where: { id: resultId },
-        data: { 
+        data: {
           marks: newTotalScore,
           testScore: finalTestScore
         }
@@ -2144,7 +2148,7 @@ async function start() {
       // Map specific classes to their broad scheduling categories
       const studentClassLower = student.studentClass.toLowerCase();
       const classCategories = [student.studentClass]; // Always include their exact class
-      
+
       if (['ss1', 'ss2', 'ss3'].includes(studentClassLower)) {
         classCategories.push('Senior Secondary');
       } else if (['js1', 'js2', 'js3'].includes(studentClassLower)) {
@@ -2215,7 +2219,7 @@ async function start() {
       // Generate possible class name variants to match how teachers might have typed it
       const sClass = (student.studentClass || "").toLowerCase();
       const possibleClasses = [student.studentClass];
-      
+
       if (sClass.match(/^ss\d$/)) {
         possibleClasses.push(`SSS ${sClass.replace('ss', '')}`);
         possibleClasses.push(`ss ${sClass.replace('ss', '')}`);
@@ -2223,7 +2227,7 @@ async function start() {
         possibleClasses.push(`JSS ${sClass.replace('js', '')}`);
         possibleClasses.push(`js ${sClass.replace('js', '')}`);
       }
-      
+
       const rawQuestions = await prisma.examQuestion.findMany({
         where: {
           schoolId: request.user.schoolId,
@@ -2250,7 +2254,7 @@ async function start() {
         return Math.random() - 0.5;
       });
 
-      return { 
+      return {
         exam: {
           subject: exam.subject,
           duration: exam.duration,
@@ -2274,7 +2278,7 @@ async function start() {
     try {
       const student = await prisma.user.findUnique({ where: { id: request.user.id } });
       const exam = await prisma.examSchedule.findUnique({ where: { id: request.params.id } });
-      
+
       if (!exam || !student) {
         return reply.code(404).send({ error: "Exam or student not found" });
       }
@@ -2322,7 +2326,7 @@ async function start() {
       for (const q of questions) {
         maxScore += q.marks || 1;
         const studentAnswer = answers[q.id];
-        
+
         console.log(`[DEBUG_SUBMIT] QID: ${q.id}, Type: ${q.type}, StudentAnswer: "${studentAnswer}"`);
 
         if (!studentAnswer) continue;
@@ -2331,7 +2335,7 @@ async function start() {
           const answerLetter = (q.answer || "").toUpperCase().trim();
           const optionIndex = answerLetter.charCodeAt(0) - 65;
           const correctOptionText = q.options[optionIndex];
-          
+
           console.log(`[DEBUG_SUBMIT] Correct Letter: ${answerLetter}, Index: ${optionIndex}, CorrectText: "${correctOptionText}"`);
 
           if (correctOptionText) {
